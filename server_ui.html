@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Server Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #141414; color: #e0e0e0; font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100vh; }
+
+  .header { background: #1c1c1c; border-bottom: 1px solid #2e2e2e; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 16px; font-weight: 700; color: #fff; }
+  .header-right { display: flex; align-items: center; gap: 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #666; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 5px; animation: blink 1.4s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  .statusbar { background: #1c1c1c; border-bottom: 1px solid #2e2e2e; padding: 10px 24px; display: flex; align-items: center; gap: 12px; }
+  .badge { padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+  .b-waiting   { background:#2a2a2a; color:#666; }
+  .b-connected { background:#2a1f00; color:#f59e0b; }
+  .b-receiving { background:#0a1929; color:#60a5fa; }
+  .b-sending   { background:#0a1929; color:#60a5fa; }
+  .b-done      { background:#052010; color:#4ade80; }
+  .b-error     { background:#1f0a0a; color:#f87171; }
+  .status-info { color: #666; font-size: 13px; }
+  .btn { margin-left: auto; padding: 6px 14px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #888; font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; }
+  .btn:hover { background: #1f0a0a; border-color: #f87171; color: #f87171; }
+
+  .content { padding: 20px 24px; display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+
+  /* ── LEFT: drop control ── */
+  .left { display: flex; flex-direction: column; gap: 14px; }
+
+  .card { background: #1c1c1c; border: 1px solid #2e2e2e; border-radius: 8px; padding: 16px; }
+  .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 14px; }
+
+  /* Mode tabs */
+  .mode-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .mode-tab {
+    flex: 1; padding: 8px; border-radius: 6px;
+    border: 1px solid #2e2e2e; background: #141414;
+    color: #666; font-family: 'Inter', sans-serif;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    text-align: center; transition: all 0.15s;
+  }
+  .mode-tab:hover { border-color: #555; color: #ccc; }
+  .mode-tab.active { background: #e0e0e0; border-color: #e0e0e0; color: #141414; }
+  .mode-tab.active.danger { background: #f87171; border-color: #f87171; color: #141414; }
+  .mode-tab.active.amber  { background: #f59e0b; border-color: #f59e0b; color: #141414; }
+
+  /* Panels */
+  .mode-panel { display: none; }
+  .mode-panel.show { display: block; }
+
+  .param-label { font-size: 11px; color: #666; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .param-label span { color: #ccc; font-family: 'JetBrains Mono', monospace; }
+
+  input[type=range] {
+    width: 100%; height: 4px; border-radius: 2px;
+    background: #2e2e2e; outline: none; cursor: pointer;
+    -webkit-appearance: none; appearance: none; margin-bottom: 14px;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px;
+    border-radius: 50%; background: #e0e0e0; cursor: pointer;
+  }
+
+  /* Manual chunk input */
+  .manual-input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .manual-input {
+    flex: 1; background: #141414; border: 1px solid #2e2e2e;
+    border-radius: 6px; padding: 8px 10px;
+    color: #e0e0e0; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    outline: none;
+  }
+  .manual-input:focus { border-color: #555; }
+  .manual-input::placeholder { color: #3a3a3a; }
+
+  .btn-add {
+    padding: 8px 14px; background: #2a2a2a; border: 1px solid #3a3a3a;
+    border-radius: 6px; color: #ccc; font-family: 'Inter', sans-serif;
+    font-size: 13px; cursor: pointer; white-space: nowrap;
+  }
+  .btn-add:hover { background: #333; border-color: #555; }
+
+  /* Selected chips */
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; min-height: 28px; margin-bottom: 10px; }
+  .chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 3px 10px 3px 10px;
+    background: #f59e0b22; border: 1px solid #f59e0b55;
+    border-radius: 4px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; color: #f59e0b;
+  }
+  .chip-remove { cursor: pointer; opacity: 0.6; font-size: 14px; line-height: 1; }
+  .chip-remove:hover { opacity: 1; }
+  .chips-empty { font-size: 12px; color: #3a3a3a; }
+
+  .btn-apply {
+    width: 100%; padding: 10px; background: #e0e0e0; color: #141414;
+    border: none; border-radius: 6px; font-family: 'Inter', sans-serif;
+    font-size: 13px; font-weight: 700; cursor: pointer; margin-top: 4px;
+    transition: background 0.15s;
+  }
+  .btn-apply:hover { background: #fff; }
+
+  .apply-status { font-size: 11px; color: #4ade80; margin-top: 8px; text-align: center; display: none; }
+
+  /* Active config display */
+  .config-display {
+    background: #141414; border: 1px solid #2e2e2e;
+    border-radius: 6px; padding: 10px 12px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: #666; line-height: 1.8;
+  }
+  .config-display .mode-label { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .config-display .mode-label.none-mode   { color: #4ade80; }
+  .config-display .mode-label.random-mode { color: #f87171; }
+  .config-display .mode-label.manual-mode { color: #f59e0b; }
+
+  /* ── RIGHT: live monitor ── */
+  .right { display: flex; flex-direction: column; gap: 14px; }
+
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .stat { background: #1c1c1c; border: 1px solid #2e2e2e; border-radius: 8px; padding: 12px 14px; }
+  .stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 5px; }
+  .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 500; color: #e0e0e0; }
+  .stat-value small { font-size: 11px; color: #555; }
+  .stat-value.red   { color: #f87171; }
+  .stat-value.amber { color: #f59e0b; }
+  .stat-value.green { color: #4ade80; }
+
+  .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 8px; }
+
+  .box { background: #1c1c1c; border: 1px solid #2e2e2e; border-radius: 8px; padding: 14px 16px; min-height: 56px; }
+  .chunk-list { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chunk { width: 34px; height: 34px; border-radius: 6px; border: 1px solid #2e2e2e; background: #141414; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #3a3a3a; transition: all 0.2s; }
+  .chunk.sent    { background: #e0e0e0; border-color: #e0e0e0; color: #141414; font-weight: 600; }
+  .chunk.dropped { background: #1f0a0a; border-color: #7f1d1d; color: #f87171; }
+  .chunk.targeted { background: #2a1f00; border-color: #854d0e; color: #f59e0b; }
+
+  .checksum { background: #1c1c1c; border: 1px solid #2e2e2e; border-radius: 8px; padding: 14px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #444; word-break: break-all; line-height: 1.6; }
+  .checksum.filled { color: #4ade80; border-color: #14532d; }
+
+  .log { background: #111; border: 1px solid #2e2e2e; border-radius: 8px; padding: 14px 16px; height: 240px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8; }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .log-line { color: #444; }
+  .log-line .ts { color: #333; margin-right: 8px; }
+  .log-line.fresh { color: #ccc; animation: fadein 0.3s ease; }
+  .log-line.drop-line { color: #f87171; }
+  @keyframes fadein { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:none} }
+  .placeholder { color: #3a3a3a; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>File Transfer — Server</h1>
+  <div class="header-right">
+    <span><span class="dot"></span>LIVE</span>
+    <span>127.0.0.1:9999</span>
+    <span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<div class="statusbar">
+  <div class="badge b-waiting" id="badge">WAITING</div>
+  <div class="status-info" id="client-info">No client connected</div>
+  <button class="btn" onclick="doReset()">Reset</button>
+</div>
+
+<div class="content">
+
+  <!-- ── LEFT: Drop Control Panel ── -->
+  <div class="left">
+    <div class="card">
+      <div class="card-title">Packet Drop Control</div>
+
+      <!-- Mode tabs -->
+      <div class="mode-tabs">
+        <div class="mode-tab" id="tab-none"   onclick="setMode('none')">None</div>
+        <div class="mode-tab active danger" id="tab-random" onclick="setMode('random')">Random</div>
+        <div class="mode-tab" id="tab-manual" onclick="setMode('manual')">Manual</div>
+      </div>
+
+      <!-- None panel -->
+      <div class="mode-panel" id="panel-none">
+        <div style="font-size:13px;color:#666;padding:8px 0">
+          No packets will be dropped.<br>All chunks arrive on round 1.
+        </div>
+      </div>
+
+      <!-- Random panel -->
+      <div class="mode-panel show" id="panel-random">
+        <div class="param-label">
+          Drop probability per chunk
+          <span id="rate-display">25%</span>
+        </div>
+        <input type="range" id="rate-slider" min="0" max="90" value="25"
+               oninput="onRateSlider(this.value)">
+        <div style="font-size:11px;color:#555;">
+          Each chunk is independently dropped with this probability on round 1 only.
+          Retransmits are never dropped.
+        </div>
+      </div>
+
+      <!-- Manual panel -->
+      <div class="mode-panel" id="panel-manual">
+        <div class="param-label" style="margin-bottom:8px">
+          Enter sequence numbers to drop
+        </div>
+        <div class="manual-input-row">
+          <input class="manual-input" id="manual-input" type="number" min="0"
+                 placeholder="e.g. 0, 3, 7" onkeydown="if(event.key==='Enter') addChip()">
+          <button class="btn-add" onclick="addChip()">Add</button>
+        </div>
+        <div class="chips" id="chips">
+          <span class="chips-empty">No chunks selected — none will be dropped</span>
+        </div>
+        <div style="font-size:11px;color:#555;margin-top:4px">
+          These exact chunks will be dropped on the first send round.
+          Add them before the client connects.
+        </div>
+      </div>
+
+      <button class="btn-apply" onclick="applyConfig()">Apply Settings</button>
+      <div class="apply-status" id="apply-status">✓ Settings applied</div>
+    </div>
+
+    <!-- Active config display -->
+    <div class="card">
+      <div class="card-title">Active Drop Config</div>
+      <div class="config-display" id="config-display">
+        <div class="mode-label random-mode">Mode: RANDOM</div>
+        <div>Rate: 25%</div>
+        <div style="margin-top:4px;color:#444">Changes take effect on next transfer</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT: Live Monitor ── -->
+  <div class="right">
+
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-label">File Size</div>
+        <div class="stat-value" id="s-size">0 <small>B</small></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Total Chunks</div>
+        <div class="stat-value" id="s-total">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Chunks Sent</div>
+        <div class="stat-value green" id="s-sent">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Dropped</div>
+        <div class="stat-value red" id="s-dropped">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Retransmit Rounds</div>
+        <div class="stat-value amber" id="s-rounds">0</div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      Chunk grid — white = sent &nbsp;|&nbsp; red = dropped (random) &nbsp;|&nbsp; amber = dropped (manual)
+    </div>
+    <div class="box">
+      <div class="chunk-list" id="chunk-list">
+        <span class="placeholder">Waiting for transfer...</span>
+      </div>
+    </div>
+
+    <div class="section-title">SHA-256 Checksum</div>
+    <div class="checksum" id="checksum">Waiting for transfer...</div>
+
+    <div class="section-title">Server Log</div>
+    <div class="log" id="log">
+      <div class="placeholder">Server running. Waiting for a client...</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let prevLogs = [], prevChunks = [], prevDropped = [];
+  let currentMode = 'random';
+  let manualChips = [];
+
+  setInterval(() => {
+    document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8);
+  }, 1000);
+
+  /* ── Mode tabs ── */
+  function setMode(mode) {
+    currentMode = mode;
+    ['none','random','manual'].forEach(m => {
+      document.getElementById('tab-' + m).className =
+        'mode-tab' + (m === mode ? ' active' + (m === 'random' ? ' danger' : m === 'manual' ? ' amber' : '') : '');
+      document.getElementById('panel-' + m).className =
+        'mode-panel' + (m === mode ? ' show' : '');
+    });
+  }
+
+  /* ── Rate slider ── */
+  function onRateSlider(v) {
+    document.getElementById('rate-display').textContent = v + '%';
+  }
+
+  /* ── Manual chips ── */
+  function addChip() {
+    const inp = document.getElementById('manual-input');
+    const val = parseInt(inp.value.trim());
+    if (isNaN(val) || val < 0) { inp.value = ''; return; }
+    if (manualChips.includes(val)) { inp.value = ''; return; }
+    manualChips.push(val);
+    manualChips.sort((a,b) => a-b);
+    renderChips();
+    inp.value = '';
+  }
+
+  function removeChip(val) {
+    manualChips = manualChips.filter(v => v !== val);
+    renderChips();
+  }
+
+  function renderChips() {
+    const container = document.getElementById('chips');
+    if (manualChips.length === 0) {
+      container.innerHTML = '<span class="chips-empty">No chunks selected — none will be dropped</span>';
+      return;
+    }
+    container.innerHTML = manualChips.map(v =>
+      `<div class="chip">
+        #${v}
+        <span class="chip-remove" onclick="removeChip(${v})">×</span>
+      </div>`
+    ).join('');
+  }
+
+  /* ── Apply config ── */
+  async function applyConfig() {
+    let body;
+    if (currentMode === 'none') {
+      body = { mode: 'none' };
+    } else if (currentMode === 'random') {
+      const rate = parseInt(document.getElementById('rate-slider').value) / 100;
+      body = { mode: 'random', drop_rate: rate };
+    } else {
+      body = { mode: 'manual', manual_drops: manualChips };
+    }
+
+    await fetch('/api/drop-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    updateConfigDisplay(body);
+
+    const status = document.getElementById('apply-status');
+    status.style.display = 'block';
+    setTimeout(() => status.style.display = 'none', 2000);
+  }
+
+  function updateConfigDisplay(cfg) {
+    const el = document.getElementById('config-display');
+    if (cfg.mode === 'none') {
+      el.innerHTML = `<div class="mode-label none-mode">Mode: NONE</div><div>All chunks will be delivered</div>`;
+    } else if (cfg.mode === 'random') {
+      el.innerHTML = `<div class="mode-label random-mode">Mode: RANDOM</div><div>Rate: ${Math.round(cfg.drop_rate * 100)}%</div><div style="margin-top:4px;color:#444">~${Math.round(cfg.drop_rate * 100)}% of chunks dropped on round 1</div>`;
+    } else {
+      const list = cfg.manual_drops.length > 0
+        ? cfg.manual_drops.map(v => `#${v}`).join(', ')
+        : 'none';
+      el.innerHTML = `<div class="mode-label manual-mode">Mode: MANUAL</div><div>Dropping: ${list}</div><div style="margin-top:4px;color:#444">${cfg.manual_drops.length} chunk(s) will be dropped</div>`;
+    }
+  }
+
+  /* ── Polling ── */
+  function fmtBytes(n) {
+    if (n >= 1048576) return (n/1048576).toFixed(1) + ' <small>MB</small>';
+    if (n >= 1024)    return (n/1024).toFixed(1) + ' <small>KB</small>';
+    return n + ' <small>B</small>';
+  }
+
+  const badgeMap = {
+    waiting:'b-waiting', connected:'b-connected',
+    receiving:'b-receiving', sending:'b-sending',
+    done:'b-done', error:'b-error'
+  };
+
+  async function poll() {
+    try {
+      const d = await fetch('/api/status').then(r => r.json());
+      const s = (d.status || 'waiting').toLowerCase();
+
+      document.getElementById('badge').className = 'badge ' + (badgeMap[s] || 'b-waiting');
+      document.getElementById('badge').textContent = (d.status || 'WAITING').toUpperCase();
+      document.getElementById('client-info').textContent =
+        d.client_addr ? 'Client: ' + d.client_addr : 'No client connected';
+
+      document.getElementById('s-size').innerHTML    = fmtBytes(d.file_size || 0);
+      document.getElementById('s-total').textContent = d.total_chunks || 0;
+      document.getElementById('s-sent').textContent  = (d.chunks_sent || []).length;
+      document.getElementById('s-dropped').textContent = (d.dropped_chunks || []).length;
+      document.getElementById('s-rounds').textContent  = d.retransmit_rounds || 0;
+
+      // Sync drop config display from server state
+      if (d.drop_config) updateConfigDisplay(d.drop_config);
+
+      const ck = document.getElementById('checksum');
+      if (d.checksum) { ck.textContent = d.checksum; ck.classList.add('filled'); }
+      else { ck.textContent = 'Waiting for transfer...'; ck.classList.remove('filled'); }
+
+      // Chunk grid
+      const sent      = d.chunks_sent    || [];
+      const dropped   = d.dropped_chunks || [];
+      const total     = d.total_chunks   || 0;
+      const manualSet = d.drop_config && d.drop_config.mode === 'manual'
+        ? (d.drop_config.manual_drops || []) : [];
+
+      const key = JSON.stringify({sent, dropped});
+      if (total > 0 && key !== JSON.stringify({sent: prevChunks, dropped: prevDropped})) {
+        const list = document.getElementById('chunk-list');
+        list.innerHTML = '';
+        for (let i = 0; i < total; i++) {
+          const c = document.createElement('div');
+          if      (sent.includes(i))    c.className = 'chunk sent';
+          else if (manualSet.includes(i) && dropped.includes(i)) c.className = 'chunk targeted';
+          else if (dropped.includes(i)) c.className = 'chunk dropped';
+          else                          c.className = 'chunk';
+          c.textContent = i;
+          list.appendChild(c);
+        }
+        prevChunks  = [...sent];
+        prevDropped = [...dropped];
+      }
+
+      // Logs
+      const logs = d.logs || [];
+      if (logs.length !== prevLogs.length) {
+        const logEl = document.getElementById('log');
+        if (prevLogs.length === 0) logEl.innerHTML = '';
+        logs.slice(prevLogs.length).forEach(line => {
+          const div = document.createElement('div');
+          div.className = 'log-line fresh' + (line.includes('[DROP]') ? ' drop-line' : '');
+          const m = line.match(/^(\[\d+:\d+:\d+\])\s+(.*)/);
+          div.innerHTML = m ? `<span class="ts">${m[1]}</span>${m[2]}` : line;
+          logEl.appendChild(div);
+          setTimeout(() => div.classList.remove('fresh'), 400);
+        });
+        logEl.scrollTop = logEl.scrollHeight;
+        prevLogs = [...logs];
+      }
+    } catch(e) {}
+  }
+
+  async function doReset() {
+    await fetch('/api/reset', { method: 'POST' });
+    prevLogs = []; prevChunks = []; prevDropped = [];
+    document.getElementById('log').innerHTML = '<div class="placeholder">Server running. Waiting for a client...</div>';
+    document.getElementById('chunk-list').innerHTML = '<span class="placeholder">Waiting for transfer...</span>';
+    document.getElementById('checksum').textContent = 'Waiting for transfer...';
+    document.getElementById('checksum').classList.remove('filled');
+  }
+
+  setInterval(poll, 800);
+  poll();
+</script>
+</body>
+</html>

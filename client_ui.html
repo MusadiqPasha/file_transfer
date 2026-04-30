@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client — Send File</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #141414; color: #e0e0e0; font-family: 'Inter', sans-serif; font-size: 14px; min-height: 100vh; }
+  .header { background: #1c1c1c; border-bottom: 1px solid #2e2e2e; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 16px; font-weight: 700; color: #fff; }
+  .header-right { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #666; }
+  .statusbar { background: #1c1c1c; border-bottom: 1px solid #2e2e2e; padding: 10px 24px; display: flex; align-items: center; gap: 12px; }
+  .badge { padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+  .b-idle       { background:#2a2a2a; color:#666; }
+  .b-connecting { background:#2a1f00; color:#f59e0b; }
+  .b-sending    { background:#0a1929; color:#60a5fa; }
+  .b-receiving  { background:#0a1929; color:#60a5fa; }
+  .b-verifying  { background:#2a1f00; color:#f59e0b; }
+  .b-success    { background:#052010; color:#4ade80; }
+  .b-failed, .b-error { background:#1f0a0a; color:#f87171; }
+  .status-right { margin-left: auto; font-size: 13px; color: #666; }
+  .btn-plain { padding: 6px 14px; background: #2a2a2a; border: 1px solid #3a3a3a; border-radius: 6px; color: #888; font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; }
+  .btn-plain:hover { background: #1f0a0a; border-color: #f87171; color: #f87171; }
+  .content { padding: 20px 24px; display: grid; grid-template-columns: 340px 1fr; gap: 20px; align-items: start; }
+  .left, .right { display: flex; flex-direction: column; gap: 14px; }
+  .card { background: #1c1c1c; border: 1px solid #2e2e2e; border-radius: 8px; padding: 16px; }
+  .card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 12px; }
+  .drop-zone { border: 1.5px dashed #333; border-radius: 8px; padding: 28px 16px; text-align: center; cursor: pointer; position: relative; transition: all 0.2s; }
+  .drop-zone:hover, .drop-zone.drag { border-color: #666; background: #1a1a1a; }
+  .drop-zone input { position: absolute; inset:0; opacity:0; cursor:pointer; width:100%; }
+  .drop-icon { font-size: 28px; margin-bottom: 8px; }
+  .drop-text { font-size: 14px; font-weight: 600; color: #ccc; margin-bottom: 3px; }
+  .drop-sub  { font-size: 12px; color: #555; }
+  .file-info { background: #141414; border: 1px solid #2e2e2e; border-radius: 6px; padding: 10px 12px; display: none; }
+  .file-info.show { display: block; }
+  .file-name { font-weight: 600; font-size: 13px; color: #e0e0e0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-bottom: 2px; }
+  .file-size { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #555; }
+  .btn-send { width: 100%; padding: 13px; background: #e0e0e0; color: #141414; border: none; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700; cursor: pointer; transition: background 0.15s; }
+  .btn-send:hover:not(:disabled) { background: #fff; }
+  .btn-send:disabled { background: #2a2a2a; color: #444; cursor: default; }
+  .btn-reset-full { width: 100%; padding: 9px; background: transparent; border: 1px solid #2e2e2e; border-radius: 8px; color: #555; font-family: 'Inter', sans-serif; font-size: 13px; cursor: pointer; }
+  .btn-reset-full:hover { border-color: #f87171; color: #f87171; }
+
+  /* Stats grid */
+  .stats-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+  .stat-mini { background: #141414; border: 1px solid #2e2e2e; border-radius: 6px; padding: 10px 12px; }
+  .stat-mini-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; margin-bottom: 4px; }
+  .stat-mini-value { font-family: 'JetBrains Mono', monospace; font-size: 17px; color: #e0e0e0; }
+  .stat-mini-value.amber { color: #f59e0b; }
+  .stat-mini-value.green { color: #4ade80; }
+  .stat-mini-value small { font-size: 11px; color: #555; }
+
+  .prog-row { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-bottom: 7px; }
+  .prog-track { height: 5px; background: #2a2a2a; border-radius: 3px; overflow: hidden; }
+  .prog-fill  { height: 100%; background: #e0e0e0; border-radius: 3px; width: 0%; transition: width 0.4s ease; }
+  .prog-fill.done { background: #4ade80; }
+  .verify { border: 1px solid #2e2e2e; border-radius: 8px; padding: 14px; text-align: center; background: #141414; min-height: 56px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: #555; margin-top: 12px; }
+  .verify.success { border-color: #14532d; background: #052010; color: #4ade80; font-weight: 600; }
+  .verify.fail    { border-color: #7f1d1d; background: #1f0a0a; color: #f87171; font-weight: 600; }
+
+  .ck-row { display: grid; grid-template-columns: 68px 1fr; gap: 8px 10px; align-items: start; }
+  .ck-label { font-size: 11px; font-weight: 600; color: #555; padding-top: 9px; }
+  .ck-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: #141414; border: 1px solid #2e2e2e; border-radius: 6px; padding: 8px 10px; word-break: break-all; color: #444; line-height: 1.5; }
+  .ck-val.match    { color: #4ade80; border-color: #14532d; }
+  .ck-val.mismatch { color: #f87171; border-color: #7f1d1d; }
+
+  .chunk-area { display: flex; flex-wrap: wrap; gap: 5px; min-height: 44px; }
+  .chunk-box { width: 34px; height: 34px; border-radius: 6px; background: #e0e0e0; color: #141414; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; animation: pop 0.2s ease; }
+  .chunk-box.retransmit { background: #f59e0b; color: #141414; }
+  @keyframes pop { from{transform:scale(0.7);opacity:0} to{transform:scale(1);opacity:1} }
+
+  .log { background: #111; border: 1px solid #2e2e2e; border-radius: 8px; padding: 14px 16px; height: 220px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.8; }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+  .log-line { color: #444; }
+  .log-line .ts { color: #333; margin-right: 8px; }
+  .log-line.fresh { color: #ccc; animation: fadein 0.3s ease; }
+  .log-line.nack-line { color: #f59e0b; }
+  @keyframes fadein { from{opacity:0;transform:translateY(3px)} to{opacity:1;transform:none} }
+  .placeholder { color: #3a3a3a; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>File Transfer — Client</h1>
+  <div class="header-right" id="header-file">No file selected</div>
+</div>
+
+<div class="statusbar">
+  <div class="badge b-idle" id="badge">IDLE</div>
+  <div class="status-right" id="status-msg">Pick a file and click Send</div>
+  <button class="btn-plain" onclick="doReset()">Reset</button>
+</div>
+
+<div class="content">
+
+  <!-- Left -->
+  <div class="left">
+    <div class="card">
+      <div class="card-title">Select File</div>
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" onchange="onFile(this)">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">Drop file here</div>
+        <div class="drop-sub">or click to browse</div>
+      </div>
+    </div>
+
+    <div class="file-info" id="file-info">
+      <div class="file-name" id="fc-name">—</div>
+      <div class="file-size" id="fc-size">—</div>
+    </div>
+
+    <button class="btn-send" id="btn-send" disabled onclick="startTransfer()">Send File →</button>
+    <button class="btn-reset-full" onclick="doReset()">Clear / Reset</button>
+
+    <div class="card">
+      <div class="card-title">Transfer Stats</div>
+      <div class="stats-mini">
+        <div class="stat-mini">
+          <div class="stat-mini-label">Chunks received</div>
+          <div class="stat-mini-value" id="prog-count">0 / 0</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">Retransmit rounds</div>
+          <div class="stat-mini-value amber" id="stat-rounds">0</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">Transfer speed</div>
+          <div class="stat-mini-value green" id="stat-speed">— <small>B/s</small></div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-label">Transfer time</div>
+          <div class="stat-mini-value" id="stat-time">— <small>s</small></div>
+        </div>
+      </div>
+      <div class="prog-row">
+        <span>Progress</span>
+        <span id="prog-pct">0%</span>
+      </div>
+      <div class="prog-track" style="margin-bottom:0">
+        <div class="prog-fill" id="prog-fill"></div>
+      </div>
+      <div class="verify" id="verify">Awaiting transfer...</div>
+    </div>
+  </div>
+
+  <!-- Right -->
+  <div class="right">
+    <div class="card">
+      <div class="card-title">SHA-256 Checksum Comparison</div>
+      <div class="ck-row">
+        <div class="ck-label">Expected</div>
+        <div class="ck-val" id="ck-exp">—</div>
+        <div class="ck-label">Actual</div>
+        <div class="ck-val" id="ck-act">—</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">
+        Chunk arrival order — white = normal, amber = retransmitted
+      </div>
+      <div class="chunk-area" id="chunk-area">
+        <span class="placeholder">No chunks received yet</span>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:14px 16px 10px">
+        <div class="card-title" style="margin:0">Transfer Log</div>
+      </div>
+      <div class="log" id="log">
+        <div class="placeholder">Ready. Waiting for transfer to start...</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let selectedFile = null;
+  let prevLogs = [], prevChunks = [];
+  let polling = false;
+  let currentRound = 0;
+
+  const badgeMap = {
+    idle:'b-idle', connecting:'b-connecting', sending:'b-sending',
+    receiving:'b-receiving', verifying:'b-verifying',
+    success:'b-success', failed:'b-failed', error:'b-error'
+  };
+
+  const dz = document.getElementById('drop-zone');
+  dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', ()  => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag');
+    if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  function onFile(i) { if (i.files[0]) loadFile(i.files[0]); }
+
+  function fmtBytes(n) {
+    if (n >= 1048576) return (n/1048576).toFixed(2) + ' MB';
+    if (n >= 1024)    return (n/1024).toFixed(1) + ' KB';
+    return n + ' bytes';
+  }
+
+  function fmtSpeed(n) {
+    if (!n) return '— <small>B/s</small>';
+    if (n >= 1048576) return (n/1048576).toFixed(1) + ' <small>MB/s</small>';
+    if (n >= 1024)    return (n/1024).toFixed(1) + ' <small>KB/s</small>';
+    return n + ' <small>B/s</small>';
+  }
+
+  function loadFile(f) {
+    selectedFile = f;
+    document.getElementById('fc-name').textContent = f.name;
+    document.getElementById('fc-size').textContent = fmtBytes(f.size);
+    document.getElementById('file-info').classList.add('show');
+    document.getElementById('btn-send').disabled = false;
+    document.getElementById('header-file').textContent = f.name;
+  }
+
+  async function startTransfer() {
+    if (!selectedFile) return;
+    document.getElementById('btn-send').disabled = true;
+    prevLogs = []; prevChunks = []; currentRound = 0;
+    const form = new FormData();
+    form.append('file', selectedFile);
+    await fetch('/api/transfer', { method: 'POST', body: form });
+    polling = true;
+    poll();
+  }
+
+  async function poll() {
+    if (!polling) return;
+    try {
+      const d = await fetch('/api/status').then(r => r.json());
+      render(d);
+      const done = ['success','failed','error'].includes((d.status||'').toLowerCase());
+      if (!done) setTimeout(poll, 600);
+      else polling = false;
+    } catch(e) { setTimeout(poll, 1000); }
+  }
+
+  function render(d) {
+    const s = (d.status || 'idle').toLowerCase();
+
+    document.getElementById('badge').className = 'badge ' + (badgeMap[s] || 'b-idle');
+    document.getElementById('badge').textContent = (d.status || 'IDLE').toUpperCase();
+    const rounds = d.retransmit_rounds || 0;
+    document.getElementById('status-msg').textContent =
+      d.total_chunks > 0
+        ? `${(d.chunks_received||[]).length} of ${d.total_chunks} chunks received — round ${rounds}`
+        : 'Pick a file and click Send';
+
+    const total    = d.total_chunks || 0;
+    const received = (d.chunks_received || []).length;
+    const pct = total > 0 ? Math.round((received / total) * 100) : 0;
+    const fill = document.getElementById('prog-fill');
+    fill.style.width = pct + '%';
+    fill.className = 'prog-fill' + (s === 'success' ? ' done' : '');
+    document.getElementById('prog-count').textContent = `${received} / ${total || '?'}`;
+    document.getElementById('prog-pct').textContent   = pct + '%';
+
+    document.getElementById('stat-rounds').textContent = rounds;
+    document.getElementById('stat-speed').innerHTML = fmtSpeed(d.transfer_speed);
+    document.getElementById('stat-time').innerHTML  =
+      d.transfer_time != null ? d.transfer_time + ' <small>s</small>' : '— <small>s</small>';
+
+    const vbox = document.getElementById('verify');
+    if (d.verified === true) {
+      vbox.className = 'verify success';
+      vbox.innerHTML = '✅ &nbsp; Transfer Successful — file integrity verified';
+    } else if (d.verified === false) {
+      vbox.className = 'verify fail';
+      vbox.innerHTML = '❌ &nbsp; Checksum mismatch — file may be corrupted';
+    } else if (s === 'verifying') {
+      vbox.className = 'verify';
+      vbox.textContent = 'Verifying checksum...';
+    }
+
+    const ckE = document.getElementById('ck-exp');
+    const ckA = document.getElementById('ck-act');
+    ckE.textContent = d.expected_checksum || '—';
+    ckA.textContent = d.actual_checksum   || '—';
+    if (d.expected_checksum && d.actual_checksum) {
+      const ok = d.expected_checksum === d.actual_checksum;
+      ckE.className = 'ck-val ' + (ok ? 'match' : 'mismatch');
+      ckA.className = 'ck-val ' + (ok ? 'match' : 'mismatch');
+    }
+
+    // Chunk arrival — amber for chunks arriving after round 1
+    const chunks = d.chunks_received || [];
+    if (chunks.length !== prevChunks.length) {
+      const area = document.getElementById('chunk-area');
+      if (prevChunks.length === 0) area.innerHTML = '';
+      chunks.slice(prevChunks.length).forEach(seq => {
+        const b = document.createElement('div');
+        const isRetransmit = d.retransmit_rounds > 1 && prevChunks.length > 0;
+        b.className = 'chunk-box' + (isRetransmit ? ' retransmit' : '');
+        b.textContent = seq;
+        b.title = isRetransmit ? `Retransmitted (round ${d.retransmit_rounds})` : `Round 1`;
+        area.appendChild(b);
+      });
+      prevChunks = [...chunks];
+    }
+
+    // Logs
+    const logs = d.logs || [];
+    if (logs.length !== prevLogs.length) {
+      const logEl = document.getElementById('log');
+      if (prevLogs.length === 0) logEl.innerHTML = '';
+      logs.slice(prevLogs.length).forEach(line => {
+        const div = document.createElement('div');
+        const isNack = line.includes('NACK') || line.includes('missing');
+        div.className = 'log-line fresh' + (isNack ? ' nack-line' : '');
+        const m = line.match(/^(\[\d+:\d+:\d+\])\s+(.*)/);
+        div.innerHTML = m ? `<span class="ts">${m[1]}</span>${m[2]}` : line;
+        logEl.appendChild(div);
+        setTimeout(() => div.classList.remove('fresh'), 400);
+      });
+      logEl.scrollTop = logEl.scrollHeight;
+      prevLogs = [...logs];
+    }
+  }
+
+  async function doReset() {
+    polling = false; selectedFile = null;
+    prevLogs = []; prevChunks = []; currentRound = 0;
+    document.getElementById('file-input').value = '';
+    document.getElementById('file-info').classList.remove('show');
+    document.getElementById('btn-send').disabled = true;
+    document.getElementById('header-file').textContent = 'No file selected';
+    document.getElementById('status-msg').textContent = 'Pick a file and click Send';
+    document.getElementById('prog-fill').style.width = '0%';
+    document.getElementById('prog-fill').className = 'prog-fill';
+    document.getElementById('prog-count').textContent = '0 / 0';
+    document.getElementById('prog-pct').textContent = '0%';
+    document.getElementById('stat-rounds').textContent = '0';
+    document.getElementById('stat-speed').innerHTML = '— <small>B/s</small>';
+    document.getElementById('stat-time').innerHTML = '— <small>s</small>';
+    document.getElementById('verify').className = 'verify';
+    document.getElementById('verify').textContent = 'Awaiting transfer...';
+    document.getElementById('ck-exp').textContent = '—';
+    document.getElementById('ck-exp').className = 'ck-val';
+    document.getElementById('ck-act').textContent = '—';
+    document.getElementById('ck-act').className = 'ck-val';
+    document.getElementById('chunk-area').innerHTML = '<span class="placeholder">No chunks received yet</span>';
+    document.getElementById('log').innerHTML = '<div class="placeholder">Ready. Waiting for transfer to start...</div>';
+    document.getElementById('badge').className = 'badge b-idle';
+    document.getElementById('badge').textContent = 'IDLE';
+    await fetch('/api/reset', { method: 'POST' });
+  }
+</script>
+</body>
+</html>
