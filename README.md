@@ -76,6 +76,16 @@ Click **Apply Settings** before the client sends a file.
 
 ---
 
+## Screenshots
+
+### Client Dashboard
+![Client UI](./client_ui.png)
+
+### Server Dashboard
+![Server UI](./server_ui.png)
+
+---
+
 ## Full Protocol — With Retransmission
 
 ```
