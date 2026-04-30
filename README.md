@@ -79,10 +79,10 @@ Click **Apply Settings** before the client sends a file.
 ## Screenshots
 
 ### Client Dashboard
-![Client UI](./client_ui.png)
+![Client UI](client_ui.png)
 
 ### Server Dashboard
-![Server UI](./server_ui.png)
+![Server UI](server_ui.png)
 
 ---
 
